@@ -22,6 +22,7 @@ Un cambio está terminado solo si `mvn -q test`, `npm test` y `npm run build` pa
 - `backend/src/main/resources/schema.sql` y `data.sql` — esquema y datos de demo (Hibernate solo valida).
 - `frontend/src/` — `api/client.js` (HTTP), `utils/format.js` (formato), `components/`, `pages/`.
 - `mcp/catalogo-coberturas/` — servidor MCP con el catálogo y reglas corporativas (configurado en `.cursor/mcp.json`).
+- `specs/NNN-nombre/` — especificaciones Spec Kit por feature (`spec.md`, `plan.md`, `tasks.md`).
 
 ## Dónde está el conocimiento
 
@@ -30,7 +31,8 @@ Un cambio está terminado solo si `mvn -q test`, `npm test` y `npm run build` pa
 - Tablas, columnas y enums: `docs/DATABASE.md`.
 - Reglas de negocio: `docs/REGLAS_NEGOCIO.md`. Reglas corporativas de suscripción/renovación: tools del MCP
   `catalogo-coberturas` (`consultar_regla_suscripcion`, `listar_coberturas`). Si difieren, manda el MCP.
-- Reglas para el agente: `.cursor/rules/`. Skills: `.cursor/skills/`. Subagentes: `.cursor/agents/`.
+- Principios no negociables: `.specify/memory/constitution.md` (prevalece sobre todo lo demás).
+- Reglas para el agente: `.cursor/rules/`. Skills: `.cursor/skills/` (incluye `speckit-*`). Subagentes: `.cursor/agents/`.
 
 ## Límites
 
