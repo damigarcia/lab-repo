@@ -1,0 +1,176 @@
+:root {
+  --color-primario: #1f4e79;
+  --color-fondo: #f5f7fa;
+  --color-borde: #d9dee5;
+  --color-texto: #1d2733;
+  --color-exito: #2e7d32;
+  --color-aviso: #b26a00;
+  --color-error: #c62828;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--color-texto);
+  background: var(--color-fondo);
+}
+
+body {
+  margin: 0;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  background: var(--color-primario);
+  color: #fff;
+}
+
+.app-header h1 {
+  font-size: 1.25rem;
+}
+
+.app-header nav a {
+  color: #fff;
+  margin-left: 16px;
+  text-decoration: none;
+  opacity: 0.8;
+}
+
+.app-header nav a.active {
+  opacity: 1;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.app-main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.filtros {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.filtros label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  gap: 4px;
+}
+
+select {
+  padding: 6px 8px;
+  border: 1px solid var(--color-borde);
+  border-radius: 4px;
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+
+.tabla th,
+.tabla td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-borde);
+  text-align: left;
+}
+
+.tabla th {
+  background: #eef2f7;
+  font-size: 0.85rem;
+}
+
+.num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: #e0e0e0;
+  vertical-align: middle;
+}
+
+.badge-vigente,
+.badge-aprobado {
+  background: #e3f2e5;
+  color: var(--color-exito);
+}
+
+.badge-vencida,
+.badge-en_revision,
+.badge-reportado {
+  background: #fff3e0;
+  color: var(--color-aviso);
+}
+
+.badge-cancelada,
+.badge-rechazado {
+  background: #fdecea;
+  color: var(--color-error);
+}
+
+.detalle {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 8px 16px;
+  background: #fff;
+  padding: 16px;
+  border: 1px solid var(--color-borde);
+}
+
+.detalle dt {
+  font-weight: 600;
+}
+
+.detalle dd {
+  margin: 0;
+}
+
+.acciones {
+  margin: 16px 0;
+  display: flex;
+  gap: 8px;
+}
+
+.boton {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--color-primario);
+  color: #fff;
+}
+
+.boton-peligro {
+  background: var(--color-error);
+}
+
+.mensaje {
+  padding: 10px 14px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.mensaje-error {
+  background: #fdecea;
+  color: var(--color-error);
+}
+
+.mensaje-exito {
+  background: #e3f2e5;
+  color: var(--color-exito);
+}
+
+.mensaje-aviso {
+  background: #fff3e0;
+  color: var(--color-aviso);
+}

@@ -1,0 +1,132 @@
+{
+  "version": "2025.1",
+  "moneda": "USD",
+  "coberturas": {
+    "AUTO": [
+      {
+        "codigo": "AUT-RC",
+        "nombre": "Responsabilidad civil",
+        "obligatoria": true,
+        "descripcion": "Daños a terceros en sus bienes y personas.",
+        "limiteMaximo": 50000
+      },
+      {
+        "codigo": "AUT-PT",
+        "nombre": "Pérdida total",
+        "obligatoria": false,
+        "descripcion": "Pérdida total por accidente o robo del vehículo.",
+        "limiteMaximo": null
+      },
+      {
+        "codigo": "AUT-DP",
+        "nombre": "Daños parciales",
+        "obligatoria": false,
+        "descripcion": "Reparación de daños por colisión, con deducible.",
+        "deduciblePorcentaje": 5
+      },
+      {
+        "codigo": "AUT-AV",
+        "nombre": "Asistencia vial",
+        "obligatoria": false,
+        "descripcion": "Grúa, auxilio mecánico y cerrajería 24/7.",
+        "limiteMaximo": 500
+      }
+    ],
+    "HOGAR": [
+      {
+        "codigo": "HOG-IN",
+        "nombre": "Incendio y terremoto",
+        "obligatoria": true,
+        "descripcion": "Daños a la estructura del inmueble por incendio, rayo o terremoto.",
+        "limiteMaximo": null
+      },
+      {
+        "codigo": "HOG-RO",
+        "nombre": "Robo de contenido",
+        "obligatoria": false,
+        "descripcion": "Robo con violencia de bienes muebles dentro del inmueble.",
+        "limiteMaximo": 15000
+      },
+      {
+        "codigo": "HOG-AG",
+        "nombre": "Daños por agua",
+        "obligatoria": false,
+        "descripcion": "Filtraciones y rotura de tuberías.",
+        "limiteMaximo": 5000
+      },
+      {
+        "codigo": "HOG-RC",
+        "nombre": "Responsabilidad civil familiar",
+        "obligatoria": false,
+        "descripcion": "Daños a terceros causados por el grupo familiar.",
+        "limiteMaximo": 20000
+      }
+    ],
+    "VIDA": [
+      {
+        "codigo": "VID-FA",
+        "nombre": "Fallecimiento",
+        "obligatoria": true,
+        "descripcion": "Pago de la suma asegurada a los beneficiarios.",
+        "limiteMaximo": null
+      },
+      {
+        "codigo": "VID-IT",
+        "nombre": "Invalidez total y permanente",
+        "obligatoria": false,
+        "descripcion": "Adelanto de la suma asegurada por invalidez.",
+        "limiteMaximo": null
+      },
+      {
+        "codigo": "VID-GF",
+        "nombre": "Gastos funerarios",
+        "obligatoria": false,
+        "descripcion": "Reembolso de gastos funerarios.",
+        "limiteMaximo": 3000
+      }
+    ]
+  },
+  "reglasGenerales": {
+    "renovacion": {
+      "diasMaximosDespuesDelVencimiento": 30,
+      "vigenciaRenovacionMeses": 12,
+      "estadosPermitidos": [
+        "VIGENTE",
+        "VENCIDA"
+      ],
+      "descripcion": "Una póliza puede renovarse si está VIGENTE o si está VENCIDA hace 30 días o menos. La nueva póliza tiene vigencia de 12 meses contados desde la fecha de fin de la póliza original."
+    },
+    "recargoSiniestralidad": {
+      "porcentaje": 10,
+      "ventanaMeses": 12,
+      "descripcion": "Si la póliza registró al menos un siniestro (en cualquier estado excepto RECHAZADO) con fecha de ocurrencia dentro de los últimos 12 meses, la prima de renovación se incrementa un 10%."
+    }
+  },
+  "reglasSuscripcion": {
+    "AUTO": {
+      "sumaAseguradaMinima": 3000,
+      "sumaAseguradaMaxima": 150000,
+      "antiguedadMaximaVehiculoAnios": 20,
+      "observaciones": [
+        "Vehículos de uso comercial requieren aprobación manual."
+      ]
+    },
+    "HOGAR": {
+      "sumaAseguradaMinima": 10000,
+      "sumaAseguradaMaxima": 500000,
+      "observaciones": [
+        "Inmuebles en zona de riesgo sísmico alto requieren inspección previa."
+      ]
+    },
+    "VIDA": {
+      "sumaAseguradaMinima": 5000,
+      "sumaAseguradaMaxima": 300000,
+      "edadMinimaContratacion": 18,
+      "edadMaximaContratacion": 65,
+      "edadMaximaRenovacion": 70,
+      "observaciones": [
+        "Sumas aseguradas mayores a 150.000 USD requieren examen médico."
+      ]
+    }
+  }
+}
