@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeShellExecution": [
+      { "command": "node .cursor/hooks/guard-shell.mjs" }
+    ],
+    "afterFileEdit": [
+      { "command": "node .cursor/hooks/audit-edit.mjs" }
+    ],
+    "stop": [
+      { "command": "node .cursor/hooks/session-end.mjs" }
+    ]
+  }
+}

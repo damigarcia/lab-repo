@@ -1,0 +1,88 @@
+package com.aseguradorademo.polizas.FEATURE;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+import com.aseguradorademo.polizas.common.NotFoundException;
+import com.aseguradorademo.polizas.common.ReglaNegocioException;
+
+// Plantilla: reemplazar FEATURE, Recurso, Accion y el JSON de ejemplo.
+@WebMvcTest(RecursoController.class)
+class RecursoControllerTest {
+
+    private static final String URL = "/api/recursos/{id}/accion";
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockBean
+    private RecursoService recursoService;
+
+    @Test
+    void accion_valida_devuelve201ConLocation() throws Exception {
+        when(recursoService.accion(eq(1L), any(AccionRecursoRequest.class))).thenReturn(respuestaEjemplo(10L));
+
+        mockMvc.perform(post(URL, 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"campo": "valor"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(header().string("Location", "/api/recursos/10"))
+                .andExpect(jsonPath("$.id").value(10));
+    }
+
+    @Test
+    void accion_requestInvalido_devuelve400() throws Exception {
+        mockMvc.perform(post(URL, 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.codigo").value("VALIDACION"));
+    }
+
+    @Test
+    void accion_recursoInexistente_devuelve404() throws Exception {
+        when(recursoService.accion(eq(99L), any(AccionRecursoRequest.class)))
+                .thenThrow(new NotFoundException("Recurso", 99L));
+
+        mockMvc.perform(post(URL, 99L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"campo": "valor"}
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.codigo").value("NO_ENCONTRADO"));
+    }
+
+    @Test
+    void accion_violaReglaDeNegocio_devuelve422() throws Exception {
+        when(recursoService.accion(eq(1L), any(AccionRecursoRequest.class)))
+                .thenThrow(new ReglaNegocioException("CODIGO_REGLA", "Mensaje en español"));
+
+        mockMvc.perform(post(URL, 1L)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"campo": "valor"}
+                                """))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.codigo").value("CODIGO_REGLA"));
+    }
+
+    private RecursoResponse respuestaEjemplo(Long id) {
+        // Construir un RecursoResponse con datos ficticios.
+        throw new UnsupportedOperationException("completar");
+    }
+}

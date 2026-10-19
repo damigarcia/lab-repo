@@ -1,0 +1,45 @@
+---
+description: Convenciones del backend Java/Spring Boot (capas, DTOs, errores, tests). Aplica al crear o modificar código Java.
+globs: backend/**/*.java
+alwaysApply: false
+---
+
+# Backend Java · convenciones
+
+Paquete base `com.aseguradorademo.polizas`, organizado **por feature** (`poliza/`, `cliente/`, `siniestro/`) más `common/`.
+Detalle completo en @CONTRIBUTING.md y @docs/ARQUITECTURA.md.
+
+## Capas
+- **Controller delgado**: recibe `Crear*Request` con `@Valid`, delega en el service y devuelve un `*Response`. Nada de reglas de negocio, `if` de dominio ni repositorios en el controller.
+- **Service**: toda la lógica de negocio. `@Transactional(readOnly = true)` en la clase y `@Transactional` en métodos que escriben.
+- Una feature usa a otra a través de su **service**, nunca de su repository.
+- Inyección por constructor. Prohibido `@Autowired` en campos.
+
+## DTOs y entidades
+- DTOs como `record`: `XResponse` (salida) y `CrearXRequest` / `<Accion>XRequest` (entrada) con Bean Validation (`@NotNull`, `@NotBlank`, `@Size`, `@DecimalMin`, `@Digits`, `@PastOrPresent`).
+- Conversión entidad → DTO en `XMapper` con métodos `static`.
+- **Nunca exponer entidades JPA** en un controller (ni en listas ni anidadas).
+- Montos `BigDecimal` (nunca `double`), fechas `LocalDate`, enums con `@Enumerated(EnumType.STRING)`.
+- Columnas con `@Column(name = "snake_case")` explícito. Si cambia el modelo, actualizar `schema.sql`, `data.sql` y @docs/DATABASE.md.
+
+## Errores
+- Lanzar `NotFoundException` (404) o `ReglaNegocioException(codigo, mensaje)` (422). Código en MAYÚSCULAS_CON_GUION_BAJO.
+- No hacer `try/catch` para armar respuestas: lo resuelve `GlobalExceptionHandler` con `ErrorResponse`.
+- No exponer stack traces ni mensajes internos.
+
+## Reglas de negocio
+- Antes de implementar reglas, revisar @docs/REGLAS_NEGOCIO.md y consultar el MCP `catalogo-coberturas`.
+- Sin números mágicos: constantes con nombre (`private static final`) o en el enum.
+- "Hoy" siempre con `LocalDate.now(clock)` usando el `Clock` inyectado.
+- Reutilizar antes de crear: buscar métodos existentes (p. ej. `SiniestroService.contarUltimos12Meses`, `PolizaService.estaEnPeriodoDeGracia`) antes de escribir uno nuevo.
+
+## Contratos de API
+- No renombrar ni quitar campos de respuestas existentes. Se permite agregar.
+- 201 + header `Location` al crear; 200 en acciones; acciones como sub-recurso: `POST /api/polizas/{id}/cancelacion`.
+
+## Tests (obligatorios)
+- Todo cambio de backend incluye tests:
+  - service: `@ExtendWith(MockitoExtension.class)`, casos felices y de error, `Clock.fixed` si depende de la fecha;
+  - controller: `@WebMvcTest(XController.class)` + `MockMvc` + `@MockBean` del service (200/201, 400, 404/422).
+- Nombres `metodo_escenario_resultadoEsperado`.
+- Terminar corriendo `cd backend && mvn -q test`. No dar la tarea por cerrada con tests en rojo.

@@ -24,3 +24,6 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Auditoría local de hooks de Cursor
+.cursor/audit/

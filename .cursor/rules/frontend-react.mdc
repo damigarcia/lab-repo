@@ -1,0 +1,30 @@
+---
+description: Convenciones del frontend React + Vite (JavaScript). Aplica al crear o modificar componentes y páginas.
+globs: frontend/src/**/*.{js,jsx}
+alwaysApply: false
+---
+
+# Frontend React · convenciones
+
+Stack: React 18 + Vite, **JavaScript** (no TypeScript), React Router, CSS simple en `src/styles.css`. Sin librerías de UI.
+
+## Llamadas HTTP
+- Todas las llamadas pasan por `src/api/client.js` (objeto `api`). No usar `fetch` directo en componentes.
+- Para un endpoint nuevo, agregar una función en `api` con ruta relativa `/...` (el prefijo `/api` ya lo pone el cliente).
+- Los errores llegan como `ApiError` con `status`, `codigo`, `mensaje` y `detalles`: mostrar `mensaje` con el componente `Mensaje`.
+
+## Formato
+- Fechas, montos y estados **siempre** con `src/utils/format.js` (`formatFecha`, `formatMoneda`, `formatEstado`).
+- Prohibido crear funciones de formato locales o usar `new Date(isoString)` para mostrar fechas (corre la fecha por zona horaria).
+- Si falta un formato, agregarlo en `utils/format.js` con su test en `format.test.js`.
+
+## Componentes
+- Componentes funcionales con hooks. Un componente por archivo, PascalCase, extensión `.jsx`.
+- Pantallas en `src/pages/`, piezas reutilizables en `src/components/` (reusar `EstadoBadge` y `Mensaje`).
+- Estados de carga y error explícitos (`cargando`, `error`).
+- Acciones que cambian estado (cancelar, renovar…): botón visible solo si la acción es válida para el estado actual, confirmación del usuario y recarga de datos al terminar.
+- Textos de la UI en español neutro.
+
+## Tests y build
+- Utilidades con Vitest (`*.test.js` junto al archivo).
+- Terminar corriendo `cd frontend && npm test && npm run build`.
