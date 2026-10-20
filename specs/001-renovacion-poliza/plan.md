@@ -1,17 +1,23 @@
 # Implementation Plan: Renovación de póliza
 
-**Branch**: `001-renovacion-poliza` | **Date**: 2026-10-19 | **Spec**: [spec.md](spec.md)
+**Branch**: `001-renovacion-poliza` | **Date**: 2026-10-20 | **Spec**: [spec.md](spec.md)
 
 **Input**: Feature specification from `/specs/001-renovacion-poliza/spec.md`
 
+**Decisión del equipo (prompt del plan)**: la regla de recargo por siniestralidad se consulta en el MCP
+`catalogo-coberturas` al diseñar y queda como configuración del backend; el backend no llama al MCP en runtime.
+Todo lo demás (stack, convenciones, componentes a reutilizar) sale de la constitution, `AGENTS.md`, las rules y `docs/`.
+
 ## Summary
 
-Agregar la acción `POST /api/polizas/{id}/renovacion` en la feature `poliza`, implementada como un método nuevo
-`PolizaService.renovar(id)` que reutiliza la búsqueda, la generación de número y el mapper existentes, y la
-regla de período de gracia (30 días) ya presente en `estaEnPeriodoDeGracia`. La siniestralidad se obtiene de
-`SiniestroService.contarUltimos12Meses` (ajustado para excluir `RECHAZADO`, según el catálogo corporativo). Se
-agrega el estado `RENOVADA` y la columna `poliza_origen_id`. En el frontend se agrega `api.renovarPoliza` y el
-botón "Renovar" en `PolizaDetallePage`. Sin dependencias nuevas.
+La renovación se implementa dentro de la feature `poliza` como dos operaciones sobre el sub-recurso
+`/api/polizas/{id}/renovacion`: una **vista previa** (`GET`, no escribe nada) y una **confirmación** (`POST`, recibe la
+prima que vio el operador y falla si ya no coincide). La lógica vive en `PolizaService` y reutiliza `calcularPrima`,
+`estaEnPeriodoDeGracia`, `generarNumero` y `PolizaMapper`. La siniestralidad se pide a `SiniestroService`.
+
+La póliza original **no cambia de estado** (FR-011): se agrega una marca de renovación (`renovada_por_id`) y la nueva
+guarda su origen (`poliza_origen_id`, con `UNIQUE` para garantizar una sola renovación). No se agregan valores al enum
+`EstadoPoliza`, así que listados, filtros y registro de siniestros no cambian (FR-012). Sin dependencias nuevas.
 
 ## Technical Context
 
@@ -27,17 +33,16 @@ botón "Renovar" en `PolizaDetallePage`. Sin dependencias nuevas.
 
 **Project Type**: Aplicación web (backend REST + SPA)
 
-**Performance Goals**: Renovación < 300 ms p95 en entorno local (una lectura de póliza, un conteo de siniestros, dos escrituras)
+**Performance Goals**: Vista previa y confirmación < 300 ms p95 en entorno local
 
 **Constraints**:
-- Todo el código backend nuevo vive en el paquete `com.aseguradorademo.polizas.poliza` (y un ajuste puntual en `siniestro`).
-- Reutilizar `PolizaService` (no crear un `RenovacionService` aparte).
-- El cambio de modelo se hace en `schema.sql` (no hay Flyway en este repo) y se refleja en la entidad y en `docs/DATABASE.md`.
-- No cambiar contratos existentes: solo se agregan endpoint, valor de enum y campo `polizaOrigenId`.
-- Constantes con nombre para 30 días, 10 %, 12 meses y 70 años; "hoy" vía `Clock`.
-- Sin dependencias Maven ni npm nuevas.
+- Código backend nuevo en `com.aseguradorademo.polizas.poliza`; en `siniestro` solo se ajusta el conteo de siniestralidad.
+- Reutilizar `PolizaService` (no crear un `RenovacionService`).
+- Cambios de modelo en `schema.sql` (no hay Flyway), reflejados en la entidad y en `docs/DATABASE.md`.
+- Solo cambios aditivos de contrato: endpoints nuevos y dos campos nuevos al final de `PolizaResponse`.
+- Constantes con nombre para 10 % y 12 meses (valores del catálogo v2025.1); "hoy" vía `Clock`.
 
-**Scale/Scope**: 1 endpoint nuevo, ~6 archivos backend modificados, 4 archivos frontend, 2 docs
+**Scale/Scope**: 2 endpoints nuevos, ~7 archivos backend, 3 archivos frontend + 1 util nuevo, 3 docs
 
 ## Constitution Check
 
@@ -45,13 +50,13 @@ botón "Renovar" en `PolizaDetallePage`. Sin dependencias nuevas.
 
 | Principio | Cómo lo cumple el plan | Estado |
 |-----------|------------------------|--------|
-| I. Arquitectura por feature y capas | Endpoint en `PolizaController` (una línea de delegación); reglas en `PolizaService.renovar`; respuesta `PolizaResponse` vía `PolizaMapper`; errores con `ReglaNegocioException`. La siniestralidad se pide a `SiniestroService` (service, no repository). | PASA |
-| II. Reutilizar antes de crear | Se reutilizan: `buscarPoliza`, `generarNumero`, `PolizaMapper`, la regla de 30 días de `estaEnPeriodoDeGracia` (se extrae la constante y se comparte), `SiniestroService.contarUltimos12Meses`, `ApiError`/`Mensaje`/`EstadoBadge`/`formatEstado` en el frontend. Nada nuevo duplicado. | PASA |
-| III. Contratos compatibles | Solo adiciones: `POST /{id}/renovacion`, valor `RENOVADA`, campo `polizaOrigenId` en `PolizaResponse`. Tests existentes sin cambios. | PASA |
-| IV. Tests obligatorios | Tests de service (cada regla), de controller (201/404/422), de contexto (esquema) y Vitest (`formatEstado`). Se agregan tests al ajuste de siniestros (feature hoy sin tests). | PASA |
-| V. Reglas trazables | Reglas tomadas del MCP `catalogo-coberturas` (v2025.1); se agregan RN-POL-10 a RN-POL-14 en `docs/REGLAS_NEGOCIO.md` y se actualiza RN-SIN-01/06. Constantes con nombre. | PASA |
-| VI. Seguridad y datos | Sin cuerpo de request (id validado por tipo); sin datos reales; sin SQL concatenado; mensajes de error sin detalles internos. | PASA |
-| VII. Simplicidad | Sin dependencias, sin servicio nuevo, sin tabla nueva (solo una columna). | PASA |
+| I. Arquitectura por feature y capas | Endpoints en `PolizaController` (solo delegan); reglas en `PolizaService`; DTOs `record` nuevos (`RenovacionPreviewResponse`, `ConfirmarRenovacionRequest`); errores con `ReglaNegocioException`. La siniestralidad se pide a `SiniestroService` (service, no repository). | PASA |
+| II. Reutilizar antes de crear | Se reutilizan `calcularPrima` (FR-008), `estaEnPeriodoDeGracia` (la ventana de 30 días de FR-002 es el período de gracia RN-POL-06), `generarNumero`, `buscarPoliza`, `PolizaMapper`, `SiniestroService.contarUltimos12Meses`, y en el frontend `api/client.js`, `utils/format.js`, `Mensaje` y `EstadoBadge`. | PASA |
+| III. Contratos compatibles | No se agrega valor al enum de estado ni se cambia ningún campo existente. Solo se agregan `GET`/`POST /{id}/renovacion` y los campos `polizaOrigenId` y `renovadaPorId` (nulos en las pólizas existentes) al final de `PolizaResponse`. | PASA |
+| IV. Tests obligatorios | Tests de service por regla, de controller (200/201/404/422/400), de contexto (esquema) y Vitest del util de elegibilidad. | PASA |
+| V. Reglas trazables | Valores del MCP `catalogo-coberturas` v2025.1 como constantes; RN-POL-10 a RN-POL-13 en `docs/REGLAS_NEGOCIO.md` y ajuste de RN-SIN-06. | PASA |
+| VI. Seguridad y datos | El único input es la prima confirmada (Bean Validation); sin datos reales; errores vía `GlobalExceptionHandler`. | PASA |
+| VII. Simplicidad | Sin dependencias, sin servicio ni tabla nuevos; dos columnas. | PASA |
 
 ## Project Structure
 
@@ -69,134 +74,151 @@ specs/001-renovacion-poliza/
 ```text
 backend/src/main/java/com/aseguradorademo/polizas/
 ├── poliza/
-│   ├── EstadoPoliza.java          # + RENOVADA
-│   ├── Poliza.java                # + polizaOrigenId, + marcarRenovada(), + admiteSiniestroEn(fecha)
-│   ├── PolizaResponse.java        # + polizaOrigenId (campo agregado al final)
-│   ├── PolizaMapper.java          # mapea polizaOrigenId
-│   ├── PolizaService.java         # + renovar(id), + obtenerEntidad(id); constantes DIAS_MAXIMOS_RENOVACION, RECARGO_SINIESTRALIDAD, EDAD_MAXIMA_RENOVACION_VIDA
-│   └── PolizaController.java      # + POST /{id}/renovacion
+│   ├── Poliza.java                       # + polizaOrigenId, + renovadaPorId, + marcarRenovadaPor(nueva), + estaRenovada()
+│   ├── PolizaResponse.java               # + polizaOrigenId, + renovadaPorId (al final del record)
+│   ├── PolizaMapper.java                 # mapea los dos campos nuevos
+│   ├── RenovacionPreviewResponse.java    # nuevo record (vista previa)
+│   ├── ConfirmarRenovacionRequest.java   # nuevo record (prima confirmada)
+│   ├── PolizaService.java                # + previsualizarRenovacion(id), + renovar(id, request); constantes RECARGO_SINIESTRALIDAD, DIAS_GRACIA
+│   └── PolizaController.java             # + GET y POST /{id}/renovacion
 └── siniestro/
-    ├── SiniestroRepository.java   # + countByPolizaIdAndFechaOcurrenciaAfterAndEstadoNot
-    ├── SiniestroService.java      # contarUltimos12Meses excluye RECHAZADO; registrar() valida (acepta RENOVADA en vigencia)
-    └── SiniestroController.java   # sin PolizaRepository ni reglas: delega (ver Complexity Tracking)
+    ├── SiniestroRepository.java          # + countByPolizaIdAndFechaOcurrenciaGreaterThanEqualAndEstadoNot
+    └── SiniestroService.java             # contarUltimos12Meses: ventana inclusiva y excluye RECHAZADO
 
 backend/src/main/resources/
-├── schema.sql                     # CHECK estado + RENOVADA; columna poliza_origen_id + FK
-└── data.sql                       # sin cambios obligatorios
+└── schema.sql                            # columnas poliza_origen_id (UNIQUE) y renovada_por_id + FKs
 
 backend/src/test/java/com/aseguradorademo/polizas/
-├── poliza/PolizaServiceTest.java      # + tests de renovar
-├── poliza/PolizaControllerTest.java   # + tests del endpoint
-├── siniestro/SiniestroServiceTest.java    # nuevo
-└── siniestro/SiniestroControllerTest.java # nuevo
+├── poliza/PolizaServiceTest.java         # + tests de vista previa y renovación
+├── poliza/PolizaControllerTest.java      # + tests de los endpoints; el helper del record pasa null a los campos nuevos
+└── siniestro/SiniestroServiceTest.java   # nuevo: ventana y exclusión de RECHAZADO
 
 frontend/src/
-├── api/client.js                  # + renovarPoliza(id)
-├── utils/format.js                # + etiqueta RENOVADA
-├── utils/format.test.js           # + test de RENOVADA
-├── pages/PolizaDetallePage.jsx    # + botón Renovar
-├── pages/PolizasPage.jsx          # + RENOVADA en filtro
-└── styles.css                     # + .badge-renovada
+├── api/client.js                         # + previsualizarRenovacion(id), + renovarPoliza(id, primaAnual)
+├── utils/renovacion.js                   # nuevo: puedeRenovar(poliza)
+├── utils/renovacion.test.js              # nuevo
+└── pages/PolizaDetallePage.jsx           # + botón Renovar, panel de vista previa, vínculos origen/renovada
 
 docs/
-├── REGLAS_NEGOCIO.md              # RN-POL-10..14, ajuste RN-SIN-01 y RN-SIN-06
-└── DATABASE.md                    # estado RENOVADA, columna poliza_origen_id
+├── REGLAS_NEGOCIO.md                     # RN-POL-10..13, ajuste RN-SIN-06
+└── DATABASE.md                           # columnas poliza_origen_id y renovada_por_id
 ```
 
-**Structure Decision**: Aplicación web existente (`backend/` + `frontend/`). La feature se implementa dentro de
-la feature `poliza` del backend, sin paquetes nuevos.
+**Structure Decision**: Aplicación web existente (`backend/` + `frontend/`). La feature vive en `poliza`, sin paquetes nuevos.
 
 ## Diseño
+
+### Por qué una marca y no un estado nuevo
+
+La spec pide que la original **conserve su estado** (FR-011) y que lo existente no cambie de significado (FR-012).
+Un estado `RENOVADA` haría que una póliza vigente deje de aparecer en `?estado=VIGENTE`, rechazaría siniestros sobre
+una póliza que todavía cubre (RN-SIN-01) y obligaría a tocar el enum, el `CHECK`, el filtro y las etiquetas del
+frontend. Con una marca, nada de eso cambia.
 
 ### Contrato
 
 ```
-POST /api/polizas/{id}/renovacion
-(sin cuerpo)
+GET /api/polizas/{id}/renovacion            vista previa, no escribe
+
+200 OK
+Body: RenovacionPreviewResponse
+  { polizaId, clienteId, clienteNombre, tipo, sumaAsegurada,
+    primaAnual, recargoAplicado, fechaInicio, fechaFin }
+
+POST /api/polizas/{id}/renovacion           confirmación
+Body: ConfirmarRenovacionRequest { primaAnual }   (@NotNull @Positive)
 
 201 Created
 Location: /api/polizas/{nuevoId}
-Body: PolizaResponse (de la póliza nueva) — incluye el nuevo campo "polizaOrigenId": {id}
+Body: PolizaResponse de la póliza nueva
 
-400 SOLICITUD_INVALIDA        id no numérico
-404 NO_ENCONTRADO             póliza inexistente
-422 POLIZA_NO_RENOVABLE       estado CANCELADA o RENOVADA
-422 PLAZO_RENOVACION_VENCIDO  VENCIDA hace más de 30 días
-422 EDAD_MAXIMA_RENOVACION    VIDA con cliente > 70 años a la nueva fecha de inicio
+Errores (ambas operaciones, formato ErrorResponse):
+400 VALIDACION / SOLICITUD_INVALIDA   body inválido o id no numérico
+404 NO_ENCONTRADO                     póliza inexistente
+422 POLIZA_YA_RENOVADA                ya tiene renovada_por_id (prevalece sobre los demás)
+422 POLIZA_NO_RENOVABLE               CANCELADA
+422 PLAZO_RENOVACION_VENCIDO          VENCIDA hace más de 30 días
+422 PRIMA_DESACTUALIZADA              solo POST: la prima recalculada no es la confirmada (FR-010)
 ```
 
-`PolizaResponse` agrega `Long polizaOrigenId` **al final** del record (los consumidores JSON no se ven
-afectados; los tests que construyen el record se actualizan con `null`).
+`PolizaResponse` agrega `Long polizaOrigenId` y `Long renovadaPorId` **al final** del record. En las pólizas
+existentes valen `null`: ningún campo actual cambia (FR-012, SC-005).
 
 ### Modelo de datos
 
 ```sql
 -- schema.sql (tabla polizas)
 poliza_origen_id  BIGINT NULL,
-CONSTRAINT fk_polizas_poliza_origen FOREIGN KEY (poliza_origen_id) REFERENCES polizas (id),
-CONSTRAINT ck_polizas_estado CHECK (estado IN ('VIGENTE', 'VENCIDA', 'CANCELADA', 'RENOVADA'))
+renovada_por_id   BIGINT NULL,
+CONSTRAINT uk_polizas_poliza_origen  UNIQUE (poliza_origen_id),
+CONSTRAINT fk_polizas_poliza_origen  FOREIGN KEY (poliza_origen_id) REFERENCES polizas (id),
+CONSTRAINT fk_polizas_renovada_por   FOREIGN KEY (renovada_por_id)  REFERENCES polizas (id)
 ```
 
-Entidad: `@Column(name = "poliza_origen_id") private Long polizaOrigenId;` (id simple, sin relación
-`@ManyToOne`, para no agregar carga perezosa innecesaria).
+Entidad: dos `@Column Long` simples (sin `@OneToOne`, para no agregar cargas perezosas).
+`ck_polizas_estado` **no cambia**.
 
-### Lógica de `PolizaService.renovar(Long id)` (`@Transactional`)
+### Lógica en `PolizaService`
+
+Un método privado `calcularRenovacion(Poliza)` arma la vista previa y lo usan las dos operaciones:
 
 1. `buscarPoliza(id)` → 404 si no existe.
-2. Estado: `CANCELADA`/`RENOVADA` → `POLIZA_NO_RENOVABLE`; `VENCIDA` y `hoy > fechaFin + DIAS_MAXIMOS_RENOVACION`
-   → `PLAZO_RENOVACION_VENCIDO`. Reutilizar la misma constante que `estaEnPeriodoDeGracia`
-   (renombrar el `30` actual a `DIAS_MAXIMOS_RENOVACION`, que es también el período de gracia — RN-POL-06).
-3. Nueva vigencia: `inicio = fechaFin + 1 día`, `fin = fechaFin + 1 año`.
-4. VIDA: edad del cliente a `inicio` (`Period.between(fechaNacimiento, inicio).getYears()`) `> 70` →
-   `EDAD_MAXIMA_RENOVACION`.
-5. Prima: `primaAnual`; si `siniestroService.contarUltimos12Meses(id) > 0` → `× (1 + RECARGO_SINIESTRALIDAD)`,
-   `setScale(2, HALF_UP)`.
-6. Crear la póliza nueva (número con `generarNumero(tipo)`, `polizaOrigenId = id`), `poliza.marcarRenovada()`,
-   `save` de la nueva. La original se persiste por dirty checking en la misma transacción.
-7. Devolver `PolizaMapper.toResponse(nueva, false)`.
+2. Elegibilidad (FR-001 a FR-003), en este orden:
+   - `estaRenovada()` → `POLIZA_YA_RENOVADA`;
+   - `CANCELADA` → `POLIZA_NO_RENOVABLE`;
+   - `VENCIDA` y no `estaEnPeriodoDeGracia(p)` → `PLAZO_RENOVACION_VENCIDO`;
+   - `VIGENTE` es renovable sin mirar fechas.
+3. Vigencia (FR-007): `inicio = fechaFin original`, `fin = inicio.plusYears(1)`. No se aplica RN-POL-03
+   (fecha de inicio no anterior a hoy), que es solo para emisión.
+4. Prima (FR-008, FR-009): `base = calcularPrima(tipo, sumaAsegurada)` (incluye mínimo y redondeo);
+   si `siniestroService.contarUltimos12Meses(id) > 0` → `base × (1 + RECARGO_SINIESTRALIDAD)`, `setScale(2, HALF_UP)`.
 
-Concurrencia (edge case de doble renovación): la segunda transacción ve la original en `RENOVADA` y recibe
-`POLIZA_NO_RENOVABLE`. Para el entorno H2 de laboratorio no se agrega bloqueo optimista (`@Version`); se deja
-anotado como mejora (ver Complexity Tracking).
+`previsualizarRenovacion(id)` devuelve ese cálculo como `RenovacionPreviewResponse`.
 
-### Siniestros (US3)
+`renovar(id, request)` (`@Transactional`):
 
-- `SiniestroService.contarUltimos12Meses` pasa a usar
-  `countByPolizaIdAndFechaOcurrenciaAfterAndEstadoNot(polizaId, desde, EstadoSiniestro.RECHAZADO)`
-  (hoy no tiene otros usos, verificado con búsqueda).
-- Las validaciones de registro que hoy están en `SiniestroController` se mueven a `SiniestroService.registrar(Poliza, request)`
-  (firma existente) y se amplía la regla de estado: se acepta `VIGENTE` o `RENOVADA`, siempre con la fecha de
-  ocurrencia dentro de la vigencia. La regla de cobertura se expresa como método de dominio
-  `Poliza.admiteSiniestroEn(LocalDate)`.
-- El controller deja de usar `PolizaRepository`: obtiene la entidad con un método nuevo de uso interno
-  `PolizaService.obtenerEntidad(id)` (no se expone por HTTP) y delega en `SiniestroService.registrar`.
-- **Dependencias entre beans** (sin ciclos): `PolizaService → SiniestroService` (siniestralidad) y
-  `SiniestroController → PolizaService, SiniestroService`. `SiniestroService` **no** depende de `PolizaService`;
-  Spring Boot rechaza referencias circulares al arrancar.
+1. Recalcula con `calcularRenovacion`. Si la elegibilidad falla, se lanza el mismo error.
+2. Si `primaAnual` recalculada `compareTo` la confirmada ≠ 0 → `PRIMA_DESACTUALIZADA` (FR-010).
+3. Crea la nueva con `generarNumero(tipo)`, `polizaOrigenId = id`; `saveAndFlush`.
+4. `original.marcarRenovadaPor(nueva.getId())`. Persiste por dirty checking en la misma transacción.
+5. Devuelve `PolizaMapper.toResponse(nueva, false)`.
 
-### Frontend (US2)
+**Doble confirmación concurrente** (edge case): la restricción `UNIQUE (poliza_origen_id)` impide la segunda
+inserción. `renovar` captura `DataIntegrityViolationException` del `saveAndFlush` y lanza
+`ReglaNegocioException("POLIZA_YA_RENOVADA", ...)`, así el manejador global devuelve 422 y no 500.
 
-- `api.renovarPoliza(id)` → `request(\`/polizas/${id}/renovacion\`, { method: 'POST' })`.
-- `PolizaDetallePage`: `const puedeRenovar = poliza.estado === 'VIGENTE' || poliza.enPeriodoDeGracia;`
-  botón "Renovar" (`.boton`), `window.confirm`, en éxito `navigate(\`/polizas/${nueva.id}\`, { state: { mensaje } })`
-  y mostrar el mensaje con `Mensaje`; en error `setError(e.message)` sin salir de la pantalla.
-- Formato con `formatMoneda` de `utils/format.js` en el mensaje de éxito (no usar las funciones locales).
-- `ETIQUETAS_ESTADO.RENOVADA = 'Renovada'`; `.badge-renovada` con color neutro/azul; `RENOVADA` en `ESTADOS`
-  de `PolizasPage`.
+### Siniestralidad
+
+`SiniestroService.contarUltimos12Meses` (hoy sin otros usos, verificado con búsqueda) pasa a
+`countByPolizaIdAndFechaOcurrenciaGreaterThanEqualAndEstadoNot(polizaId, hoy.minusMonths(12), RECHAZADO)`:
+ventana inclusiva del día límite y sin rechazados, como piden la spec y el catálogo. Se actualiza RN-SIN-06.
+`registrar` y `SiniestroController` no se tocan: la deuda plantada en el controller queda fuera de alcance.
+
+### Frontend
+
+- `api.previsualizarRenovacion(id)` → `request(\`/polizas/${id}/renovacion\`)`.
+- `api.renovarPoliza(id, primaAnual)` → `POST` con `{ primaAnual }`.
+- `utils/renovacion.js`: `puedeRenovar(poliza)` = no tiene `renovadaPorId` y (`estado === 'VIGENTE'` o `enPeriodoDeGracia`).
+- `PolizaDetallePage`:
+  - botón **Renovar** si `puedeRenovar`; al pulsarlo carga la vista previa y muestra un panel con cliente, tipo,
+    suma, prima (con aviso "Incluye recargo del 10 % por siniestralidad" si `recargoAplicado`) y vigencia, con
+    **Confirmar** y **Volver**;
+  - al confirmar: `navigate(\`/polizas/${nueva.id}\`)` con mensaje de éxito; ante error, `Mensaje` con el texto de la
+    API (si es `PRIMA_DESACTUALIZADA`, se vuelve a pedir la vista previa);
+  - si `renovadaPorId`: "Renovada por" + `Link` a la nueva; si `polizaOrigenId`: "Renovación de" + `Link`;
+  - montos y fechas nuevos con `formatMoneda` / `formatFecha` de `utils/format.js`, no con las funciones locales.
 
 ## Riesgos
 
 | Riesgo | Mitigación |
 |--------|------------|
-| Agregar `RENOVADA` al enum sin tocar el `CHECK` rompe inserts | `PolizasApplicationTests` + test de integración del flujo lo detecta; checklist del skill `nuevo-endpoint-rest` |
-| Cambiar `contarUltimos12Meses` altera otros usos | Búsqueda de referencias antes del cambio (hoy sin usos); test nuevo en `SiniestroServiceTest` |
-| Fechas mostradas con un día de diferencia | Usar `formatFecha` de `utils/format.js` en la UI nueva |
+| Columnas nuevas sin reflejar en la entidad → falla `ddl-auto=validate` | `PolizasApplicationTests` lo detecta en la Fase 2 |
+| Cambiar `contarUltimos12Meses` altera otros usos | Búsqueda de referencias antes del cambio (hoy sin usos) + `SiniestroServiceTest` |
+| Una póliza vigente ya renovada todavía se puede cancelar | Lo permite la regla actual (spec: "cancelar sigue las reglas de hoy"); se deja anotado para negocio |
+| `generarNumero` usa `count() + 1` (no es seguro con concurrencia) | Deuda previa, fuera de alcance; el `UNIQUE` de `numero` evita duplicados |
 
 ## Complexity Tracking
 
 > **Fill ONLY if Constitution Check has violations that must be justified**
 
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| Se modifica `SiniestroController`/`SiniestroService` (fuera del paquete `poliza`) | FR-013 exige aceptar siniestros sobre pólizas RENOVADA; la regla vive hoy en el controller (deuda previa que viola el principio I) | Agregar `RENOVADA` al `if` del controller perpetuaría lógica de negocio en el controller |
-| Sin bloqueo optimista para doble renovación | Entorno H2 de laboratorio, operación manual de baja concurrencia | `@Version` requiere columna nueva y manejo de `OptimisticLockException`; se propone como mejora posterior |
+Sin violaciones.

@@ -2,133 +2,127 @@
 
 **Feature Branch**: `001-renovacion-poliza`
 
-**Created**: 2026-10-19
+**Created**: 2026-10-20
 
 **Status**: Draft
 
-**Input**: User description: "Renovación de póliza: POST /api/polizas/{id}/renovacion crea una nueva póliza con vigencia de un año desde la fecha de fin de la original; la prima se ajusta +10% si hubo siniestros en los últimos 12 meses (regla del catálogo corporativo); solo se permite si la póliza está VIGENTE o VENCIDA hace 30 días o menos; la original queda marcada como RENOVADA (nuevo estado); botón 'Renovar' en el detalle del frontend; no cambiar contratos existentes."
-
-## Clarifications
-
-### Session 2026-10-19
-
-- Q: ¿Desde qué fecha arranca la nueva vigencia? → A: La nueva póliza inicia el día siguiente a la `fecha_fin` de la original y termina exactamente un año después de esa `fecha_fin`, sin solapamiento ni huecos de cobertura.
-- Q: Si se renueva una póliza VENCIDA (dentro de los 30 días), ¿la nueva póliza puede tener `fecha_inicio` en el pasado? → A: Sí. La renovación preserva la continuidad de cobertura; la regla RN-POL-03 ("fecha de inicio no anterior a hoy") aplica solo a la emisión de pólizas nuevas, no a renovaciones.
-- Q: ¿Qué siniestros cuentan para el recargo? → A: Según el catálogo corporativo (`recargoSiniestralidad`), cuentan los siniestros en cualquier estado **excepto `RECHAZADO`**, con fecha de ocurrencia dentro de los últimos 12 meses contados desde la fecha en que se solicita la renovación.
-- Q: ¿Sobre qué prima se aplica el recargo? → A: Sobre la prima anual de la póliza original (no se recalcula con la tasa base). Redondeo a 2 decimales, HALF_UP.
-- Q: Una póliza VIGENTE renovada antes de su vencimiento pasa a RENOVADA, ¿sigue cubriendo? → A: Sí. Conserva la cobertura hasta su `fecha_fin`; los siniestros ocurridos dentro de su vigencia se siguen registrando sobre ella.
-- Q: ¿Aplica alguna regla de suscripción adicional del catálogo? → A: Sí, para VIDA: `edadMaximaRenovacion = 70`. No se renueva si el cliente tiene más de 70 años a la fecha de inicio de la nueva vigencia.
+**Input**: User description: "Renovación de póliza. Un operador puede renovar una póliza que está VIGENTE o que está VENCIDA hace 30 días o menos. La renovación crea una póliza nueva del mismo cliente y tipo, con vigencia de un año a partir del fin de la póliza original. La prima se ajusta según la regla de siniestralidad del catálogo corporativo (si hubo siniestros en los últimos 12 meses). La póliza original queda marcada como renovada y no se puede renovar dos veces. Desde el detalle de la póliza en la web debe haber una acción "Renovar" que muestre la prima nueva antes de confirmar. No debe cambiar el comportamiento ni el formato de respuesta de los endpoints existentes. Fuera de alcance: cobro, envío de notificaciones y renovación masiva."
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Renovar una póliza elegible (Priority: P1)
 
-Un operador de la aseguradora renueva la póliza de un cliente que está por vencer o venció hace pocos días. El sistema emite una póliza nueva para el mismo cliente, tipo y suma asegurada, con vigencia continua respecto de la anterior, aplica el recargo por siniestralidad cuando corresponde y marca la póliza original como RENOVADA.
+Un operador abre el detalle de una póliza que está vigente, o vencida hace 30 días o menos, y que todavía no fue renovada. Elige **Renovar**, ve la prima anual de la póliza nueva y la vigencia que va a crear, y confirma. El sistema crea una sola póliza nueva para el mismo cliente y el mismo tipo, y deja la original marcada como renovada.
 
-**Why this priority**: Es el núcleo del negocio de la feature: sin la renovación vía API no hay nada que mostrar en la interfaz. Reduce la pérdida de clientes por vencimiento y evita re-emitir pólizas a mano.
+**Why this priority**: Es el motivo de la función. Sin este recorrido el operador no puede continuar la cobertura de un cliente.
 
-**Independent Test**: Se prueba completamente con llamadas a `POST /api/polizas/{id}/renovacion` sobre los datos de demostración, verificando la póliza creada (`GET /api/polizas/{nuevoId}`) y el nuevo estado de la original (`GET /api/polizas/{id}`).
+**Independent Test**: Con una póliza vigente no renovada, el operador completa la vista previa y la confirmación, y queda una póliza nueva vinculada a la original.
 
 **Acceptance Scenarios**:
 
-1. **Given** la póliza POL-HOG-0002 está VIGENTE, con prima anual 400,00 y sin siniestros, **When** el operador solicita su renovación, **Then** se crea una póliza nueva VIGENTE para el mismo cliente, tipo HOGAR y suma asegurada, con `fecha_inicio` = `fecha_fin` original + 1 día, `fecha_fin` = `fecha_fin` original + 1 año y prima anual 400,00; la respuesta es 201 con `Location` de la póliza nueva; y la original queda en estado RENOVADA.
-2. **Given** la póliza POL-AUT-0001 está VIGENTE con prima 1.000,00 y tiene siniestros no rechazados en los últimos 12 meses, **When** se solicita su renovación, **Then** la póliza nueva tiene prima anual 1.100,00 (recargo de 10 %).
-3. **Given** la póliza POL-VID-0003 está VENCIDA hace 10 días y su único siniestro ocurrió hace más de 12 meses, **When** se solicita su renovación, **Then** se crea la póliza nueva sin recargo (prima 600,00) y con `fecha_inicio` en el pasado (continuidad de cobertura).
-4. **Given** la póliza POL-AUT-0004 está VENCIDA hace 90 días, **When** se solicita su renovación, **Then** la respuesta es 422 con código `PLAZO_RENOVACION_VENCIDO` y no se crea ninguna póliza.
-5. **Given** la póliza POL-HOG-0005 está CANCELADA, **When** se solicita su renovación, **Then** la respuesta es 422 con código `POLIZA_NO_RENOVABLE`.
-6. **Given** una póliza que ya está RENOVADA, **When** se solicita su renovación nuevamente, **Then** la respuesta es 422 con código `POLIZA_NO_RENOVABLE` (no se puede renovar dos veces).
-7. **Given** un id de póliza inexistente, **When** se solicita su renovación, **Then** la respuesta es 404 con código `NO_ENCONTRADO`.
+1. **Given** una póliza vigente que no fue renovada, **When** el operador elige **Renovar** en su detalle, **Then** ve la prima anual nueva y la vigencia nueva, y todavía no existe una póliza nueva ni la original queda marcada como renovada.
+2. **Given** esa vista previa, **When** el operador confirma, **Then** se crea una póliza nueva vigente, del mismo cliente y tipo, con la misma suma asegurada, un número nuevo en el formato ya usado, prima igual a la mostrada y vigencia de un año que empieza el día de fin de la original. La original conserva su estado y queda marcada como renovada, con referencia a la póliza nueva.
+3. **Given** una póliza vencida cuyo fin fue hoy o hace hasta 30 días, y que no fue renovada, **When** el operador confirma la renovación, **Then** el resultado es el mismo que en el escenario anterior: la vigencia nueva empieza en la fecha de fin de la original, aunque esa fecha ya haya pasado.
+4. **Given** la vista previa abierta, **When** el operador no confirma, **Then** no se crea ninguna póliza y la original sigue sin marca de renovada.
+5. **Given** una póliza ya renovada, **When** el operador abre su detalle, **Then** ve que fue renovada y cuál es la póliza nueva, y no puede renovarla otra vez.
+6. **Given** la póliza nueva, **When** el operador abre su detalle, **Then** ve que continúa a la póliza original y que ella misma no está marcada como renovada.
+7. **Given** las consultas y gestiones que ya existían, **When** se usan sobre las mismas pólizas de demostración sin ejecutar **Renovar**, **Then** entregan la misma información, con el mismo significado, que antes de esta función.
 
 ---
 
-### User Story 2 - Botón "Renovar" en el detalle de la póliza (Priority: P2)
+### User Story 2 - Ver el ajuste de prima por siniestralidad (Priority: P2)
 
-Desde la pantalla de detalle de una póliza, el operador ve un botón "Renovar" solo cuando la póliza es renovable. Al confirmar, la interfaz llama a la API, informa el resultado (número y prima de la póliza nueva) y lleva al detalle de la póliza nueva. Si la API rechaza la operación, muestra el mensaje de error.
+Antes de confirmar, el operador entiende si la prima nueva es la prima de emisión habitual o si incluye el recargo porque la póliza original tuvo siniestros que cuentan en los últimos 12 meses.
 
-**Why this priority**: Hace usable la feature para operadores sin conocimientos técnicos, pero depende de que la API (P1) exista.
+**Why this priority**: La prima es lo que el operador debe aceptar. El recargo cambia el monto y tiene que ser explicable antes de confirmar.
 
-**Independent Test**: Con el backend corriendo, abrir el detalle de POL-HOG-0002, pulsar "Renovar", confirmar y verificar que se navega a la póliza nueva y que la original aparece como "Renovada" en el listado.
+**Independent Test**: Se comparan dos pólizas del mismo tipo y suma asegurada, una sin siniestros que cuenten y otra con al menos uno, y la vista previa muestra montos distintos según la regla.
 
 **Acceptance Scenarios**:
 
-1. **Given** el detalle de una póliza VIGENTE, **When** se carga la pantalla, **Then** se muestra el botón "Renovar".
-2. **Given** el detalle de una póliza VENCIDA dentro del período de gracia, **When** se carga la pantalla, **Then** se muestra el botón "Renovar" junto al aviso de período de gracia.
-3. **Given** el detalle de una póliza CANCELADA, RENOVADA o VENCIDA fuera del período de gracia, **When** se carga la pantalla, **Then** no se muestra el botón "Renovar".
-4. **Given** el operador pulsa "Renovar", **When** cancela el diálogo de confirmación, **Then** no se realiza ninguna llamada a la API.
-5. **Given** el operador confirma la renovación, **When** la API responde 201, **Then** se muestra un mensaje de éxito con el número y la prima de la póliza nueva y se navega a su detalle.
-6. **Given** el operador confirma la renovación, **When** la API responde con error (422), **Then** se muestra el mensaje devuelto por la API y la pantalla permanece en el detalle actual.
-7. **Given** el listado de pólizas, **When** se filtra por estado, **Then** la opción "RENOVADA" está disponible y las pólizas renovadas se muestran con la etiqueta "Renovada".
+1. **Given** una póliza elegible sin siniestros que cuenten en los últimos 12 meses, **When** el operador pide renovarla, **Then** la prima mostrada es la misma que correspondería al emitir hoy ese tipo y esa suma asegurada, incluido el mínimo de 100,00 USD.
+2. **Given** una póliza elegible con al menos un siniestro que cuenta, **When** el operador pide renovarla, **Then** la prima mostrada es esa prima de emisión más un 10 %, redondeada a centavos del mismo modo que al emitir, y la vista previa indica que el recargo aplica.
+3. **Given** varios siniestros que cuentan sobre la misma póliza, **When** el operador pide renovarla, **Then** el recargo sigue siendo un único 10 %, no un 10 % por cada siniestro.
+4. **Given** la prima mostrada, **When** el operador confirma en ese momento, **Then** la póliza nueva guarda exactamente esa prima.
 
 ---
 
-### User Story 3 - Continuidad de cobertura de la póliza renovada (Priority: P3)
+### User Story 3 - Rechazar renovaciones no permitidas (Priority: P2)
 
-Una póliza VIGENTE renovada antes de su vencimiento queda RENOVADA pero sigue cubriendo hasta su fecha de fin. El operador puede seguir registrando siniestros ocurridos dentro de su vigencia.
+El operador no puede renovar una póliza cancelada, una vencida hace más de 30 días, ni una que ya fue renovada. Si lo intenta, no se crea una póliza y recibe un motivo claro en español.
 
-**Why this priority**: Evita una pérdida de cobertura que sería un problema legal y de servicio, pero solo afecta a renovaciones anticipadas, que son la minoría de los casos.
+**Why this priority**: Evita coberturas indebidas y renovaciones duplicadas. Puede comprobarse sin depender del caso feliz más allá de tener pólizas en esos estados.
 
-**Independent Test**: Renovar POL-AUT-0001 (VIGENTE) y registrar con `POST /api/siniestros` un siniestro con fecha de ocurrencia de hoy sobre la póliza original: debe aceptarse (201).
+**Independent Test**: Se intenta renovar una póliza de cada caso no permitido y se verifica que no aparece una póliza nueva.
 
 **Acceptance Scenarios**:
 
-1. **Given** una póliza RENOVADA cuya `fecha_fin` aún no pasó, **When** se registra un siniestro con fecha de ocurrencia dentro de su vigencia, **Then** el siniestro se registra (201) sobre la póliza original.
-2. **Given** una póliza RENOVADA, **When** se registra un siniestro con fecha de ocurrencia posterior a su `fecha_fin`, **Then** la respuesta es 422 con código `FUERA_DE_VIGENCIA`.
-3. **Given** una póliza CANCELADA o VENCIDA, **When** se registra un siniestro, **Then** la respuesta sigue siendo 422 con código `POLIZA_NO_VIGENTE` (comportamiento actual sin cambios).
+1. **Given** una póliza cancelada, **When** el operador intenta renovarla, **Then** no se crea una póliza nueva y el motivo indica que está cancelada.
+2. **Given** una póliza vencida cuyo fin fue hace 31 días o más, **When** el operador intenta renovarla, **Then** no se crea una póliza nueva y el motivo indica que está fuera del plazo de 30 días.
+3. **Given** una póliza ya renovada, **When** el operador intenta renovarla de nuevo, **Then** no se crea otra póliza y el motivo indica que ya fue renovada, aunque también esté vencida fuera de plazo.
+4. **Given** una vista previa válida, **When** antes de confirmar la póliza deja de ser elegible o la prima que correspondería ya no es la mostrada, **Then** la confirmación no crea la póliza y el operador tiene que volver a ver la prima vigente.
 
 ---
 
 ### Edge Cases
 
-- Póliza VENCIDA exactamente hace 30 días: **es renovable** (el límite es inclusive, igual que el período de gracia RN-POL-06).
-- Póliza VENCIDA hace 31 días: no renovable (`PLAZO_RENOVACION_VENCIDO`).
-- Siniestro ocurrido exactamente hace 12 meses: **no** cuenta (la ventana es "posterior a hoy − 12 meses", RN-SIN-06).
-- Póliza con siniestros recientes todos `RECHAZADO`: no lleva recargo.
-- Póliza con varios siniestros recientes: el recargo es único (10 %), no acumulativo.
-- Póliza VIDA cuyo cliente supera los 70 años a la nueva `fecha_inicio`: 422 con código `EDAD_MAXIMA_RENOVACION`.
-- Dos solicitudes de renovación simultáneas sobre la misma póliza: solo una debe crear póliza nueva; la otra recibe 422 `POLIZA_NO_RENOVABLE`.
-- Renovación de una póliza que a su vez es renovación de otra: permitida si cumple las reglas; cada póliza referencia solo a su origen inmediato.
-- Id no numérico en la ruta (`/api/polizas/abc/renovacion`): 400 `SOLICITUD_INVALIDA` (comportamiento actual del manejador global).
-- Clientes de la API existentes que no conocen el estado RENOVADA: lo reciben como un valor de texto más; ningún campo existente cambia.
+- El día 30 después del fin de una póliza vencida todavía se puede renovar. El día 31, no.
+- Una póliza vencida cuyo fin es hoy (hace 0 días) se puede renovar.
+- Una póliza vigente se puede renovar aunque su fecha de fin sea futura, sea hoy o ya haya pasado. El plazo de 30 días se aplica solo al estado vencida. Esta función no cambia un estado vigente a vencida por las fechas.
+- Si la original sigue vigente, su estado no pasa a otro por el hecho de renovarla. Sigue cubriendo hasta su propio fin. La nueva también queda vigente desde su creación, aunque su inicio sea futuro o pasado.
+- El día de fin de la original queda incluido en las dos vigencias, porque la nueva empieza ese mismo día y el fin de la original es inclusivo.
+- Un siniestro rechazado no dispara el recargo. Tampoco uno cuya ocurrencia es anterior al día que cae exactamente 12 meses antes de la renovación. Uno ocurrido ese día límite, o después, sí cuenta, si no está rechazado.
+- Los siniestros siguen asociados a la póliza original. No se copian a la nueva.
+- Confirmar dos veces la misma original, incluso por dos operadores a la vez, crea una sola póliza nueva.
+- La póliza nueva puede renovarse más adelante, cuando ella misma cumpla las reglas. Esa renovación no vuelve a renovar la original.
+- Cancelar, registrar siniestros o consultar lo ya existente sigue las reglas de hoy. Renovar no cobra, no avisa al cliente y no renueva otras pólizas del mismo cliente.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: El sistema MUST exponer `POST /api/polizas/{id}/renovacion` (sin cuerpo) que renueva la póliza indicada y responde 201 con el detalle de la póliza nueva y el header `Location: /api/polizas/{nuevoId}`.
-- **FR-002**: El sistema MUST permitir la renovación solo si la póliza está VIGENTE, o VENCIDA con `fecha_fin` a 30 días o menos de la fecha actual (inclusive). En otro caso MUST responder 422: `POLIZA_NO_RENOVABLE` (CANCELADA o RENOVADA) o `PLAZO_RENOVACION_VENCIDO` (VENCIDA hace más de 30 días).
-- **FR-003**: La póliza nueva MUST tener el mismo cliente, tipo y suma asegurada que la original, estado VIGENTE, `fecha_inicio` = `fecha_fin` original + 1 día y `fecha_fin` = `fecha_fin` original + 1 año.
-- **FR-004**: La prima anual de la póliza nueva MUST ser igual a la prima anual de la original, incrementada un 10 % si la póliza original tuvo al menos un siniestro no `RECHAZADO` con fecha de ocurrencia en los últimos 12 meses; redondeo a 2 decimales HALF_UP.
-- **FR-005**: El sistema MUST marcar la póliza original con el nuevo estado RENOVADA en la misma transacción en que crea la póliza nueva (o se hacen ambas cosas o ninguna).
-- **FR-006**: La póliza nueva MUST registrar una referencia a la póliza de origen, expuesta en la respuesta como campo nuevo `polizaOrigenId` (nulo para pólizas no renovadas).
-- **FR-007**: Para pólizas VIDA, el sistema MUST rechazar la renovación con 422 `EDAD_MAXIMA_RENOVACION` si el cliente tiene más de 70 años a la `fecha_inicio` de la nueva vigencia.
-- **FR-008**: El número de la póliza nueva MUST seguir el formato existente `POL-<TIP>-<nnnn>` (RN-POL-05).
-- **FR-009**: Los contratos existentes MUST permanecer sin cambios: ningún endpoint, parámetro, campo o código de estado actual se renombra ni elimina. Solo se agregan el endpoint de FR-001, el valor RENOVADA del estado y el campo `polizaOrigenId`.
-- **FR-010**: `GET /api/polizas` MUST aceptar `estado=RENOVADA` como filtro válido.
-- **FR-011**: La interfaz MUST mostrar el botón "Renovar" en el detalle solo para pólizas VIGENTE o VENCIDA en período de gracia, pedir confirmación, y tras el éxito informar número y prima de la póliza nueva y navegar a su detalle; ante error MUST mostrar el mensaje de la API.
-- **FR-012**: La interfaz MUST mostrar el estado RENOVADA con la etiqueta "Renovada" en listados y detalle, e incluirlo en el filtro de estado.
-- **FR-013**: El registro de siniestros MUST aceptar pólizas RENOVADA cuando la fecha de ocurrencia está dentro de su vigencia; el resto de las reglas de registro de siniestros (RN-SIN-01 a RN-SIN-04) no cambia para los demás estados.
-- **FR-014**: Las reglas nuevas MUST documentarse en `docs/REGLAS_NEGOCIO.md` con identificadores RN, y el nuevo estado y columna en `docs/DATABASE.md`.
+- **FR-001**: El sistema debe permitir renovar una póliza que está vigente y que aún no fue renovada.
+- **FR-002**: El sistema debe permitir renovar una póliza vencida que aún no fue renovada cuando la fecha de renovación es la fecha de fin o cae dentro de los 30 días siguientes, inclusive.
+- **FR-003**: El sistema debe rechazar la renovación de una póliza cancelada, de una vencida hace más de 30 días y de una ya renovada, sin crear una póliza nueva, e indicar el motivo en español. Si ya fue renovada, ese motivo prevalece sobre el de plazo o estado.
+- **FR-004**: Desde el detalle de la póliza en la web, el operador debe poder iniciar **Renovar** cuando la póliza es elegible. Si no lo es, el detalle no debe completar una renovación y debe poder explicar el motivo.
+- **FR-005**: Antes de confirmar, el operador debe ver la prima anual nueva, si incluye el recargo por siniestralidad, la suma asegurada, el cliente, el tipo y las fechas de inicio y fin de la póliza nueva. Hasta que confirme, no se crea la póliza ni se marca la original.
+- **FR-006**: Al confirmar, el sistema debe crear una única póliza nueva, vigente, del mismo cliente y del mismo tipo, con la misma suma asegurada y con un número nuevo en el formato de numeración ya vigente.
+- **FR-007**: La vigencia nueva debe durar un año: la fecha de inicio es la fecha de fin de la original y la fecha de fin es esa fecha de inicio más un año, con el mismo criterio de calendario que ya se usa al emitir. Esa fecha de inicio puede ser anterior a hoy cuando la original ya terminó.
+- **FR-008**: La prima nueva, sin recargo, debe calcularse con la misma regla de emisión ya vigente para ese tipo y esa suma asegurada, incluido el mínimo de 100,00 USD y el redondeo a centavos.
+- **FR-009**: Si la póliza original tiene al menos un siniestro no rechazado cuya fecha de ocurrencia está dentro de los últimos 12 meses (desde el día que cae exactamente 12 meses antes de la fecha de renovación, inclusive, hasta esa fecha), la prima nueva debe ser la prima del FR-008 más un 10 %, redondeada a centavos. El recargo se aplica una sola vez.
+- **FR-010**: La prima guardada debe ser exactamente la que se mostró al confirmar. Si entre la vista previa y la confirmación la elegibilidad o la prima cambió, la confirmación no debe crear la póliza.
+- **FR-011**: La póliza original debe conservar su estado y quedar marcada como renovada, vinculada a la póliza nueva, de modo que no pueda renovarse otra vez. La póliza nueva no nace marcada como renovada y su detalle identifica la póliza de origen.
+- **FR-012**: Las consultas y gestiones ya disponibles (listar y ver pólizas, emitir, cancelar y registrar o consultar siniestros) deben conservar su comportamiento y la información que ya entregan: no se quita, no se renombra y no cambia el significado de ningún dato existente. La marca de renovación y el vínculo entre pólizas son información nueva de esta función.
+- **FR-013**: Cada confirmación debe renovar solo la póliza elegida. La función no cobra la prima, no envía notificaciones y no ofrece renovación masiva.
 
 ### Key Entities *(include if feature involves data)*
 
-- **Póliza**: se agrega el estado RENOVADA (estado final, como CANCELADA, pero con cobertura vigente hasta su `fecha_fin`) y una referencia opcional a la póliza de origen de la que es renovación.
-- **Siniestro**: sin cambios de estructura; se usa para determinar la siniestralidad de los últimos 12 meses (excluyendo RECHAZADO).
-- **Cliente**: sin cambios; su fecha de nacimiento se usa para la regla de edad máxima de renovación en VIDA.
+- **Póliza original**: La que el operador renueva. Conserva cliente, tipo, suma asegurada, vigencia, estado y siniestros. Gana la marca de renovada y la referencia a la póliza nueva.
+- **Póliza nueva**: La cobertura que continúa a la original. Mismo cliente, tipo y suma asegurada; número, prima y vigencia propios; estado vigente; referencia a la póliza de origen; sin marca de renovada y sin los siniestros de la original.
+- **Siniestro**: Hecho ya registrado sobre la original. Solo aporta al recargo su estado y su fecha de ocurrencia. No se modifica ni se traslada por la renovación.
+- **Vista previa de renovación**: El resumen que el operador acepta o abandona: prima, recargo, suma asegurada, cliente, tipo y vigencia nueva. No es una póliza hasta la confirmación.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: Un operador renueva una póliza elegible desde el detalle en menos de 30 segundos y con no más de 2 acciones (pulsar "Renovar" y confirmar).
-- **SC-002**: El 100 % de las renovaciones de pólizas con siniestros no rechazados en los últimos 12 meses aplica el recargo del 10 %, y el 0 % de las demás lo aplica (verificable con los 6 casos de los datos de demostración).
-- **SC-003**: El 0 % de las solicitudes sobre pólizas no elegibles (CANCELADA, RENOVADA, VENCIDA hace más de 30 días) produce una póliza nueva.
-- **SC-004**: La totalidad de los tests existentes previos a la feature sigue pasando sin modificaciones (cero regresiones de contrato).
-- **SC-005**: Ninguna renovación anticipada deja al cliente sin cobertura: entre la `fecha_fin` original y la `fecha_inicio` nueva hay exactamente 1 día de diferencia en el 100 % de los casos.
+- **SC-001**: Un operador que ya tiene abierto el detalle de una póliza elegible completa la vista previa y la confirmación en menos de 2 minutos.
+- **SC-002**: En la prueba de aceptación, el 100 % de las pólizas vigentes no renovadas y de las vencidas dentro de los 30 días quedan renovadas con una sola póliza nueva, el mismo cliente, el mismo tipo y la vigencia de un año definida en esta especificación.
+- **SC-003**: En la prueba de aceptación, el 100 % de los intentos sobre pólizas canceladas, vencidas hace más de 30 días o ya renovadas terminan sin póliza nueva y con un motivo comprensible para el operador.
+- **SC-004**: En un conjunto que incluya pólizas sin siniestros que cuenten, con un siniestro que cuenta, con varios, con solo rechazados y con siniestros fuera de los 12 meses, la prima mostrada y la prima guardada coinciden con la regla de esta especificación en el 100 % de los casos.
+- **SC-005**: Después de incorporar la función, las consultas y gestiones que ya existían, ejercidas sobre el mismo conjunto de pólizas de demostración y sin usar **Renovar**, entregan la misma información que antes.
 
 ## Assumptions
 
-- Los usuarios son operadores internos de la aseguradora; la autenticación y autorización están fuera del alcance (igual que en el resto de la aplicación).
-- El cobro de la prima de renovación y la emisión de documentos al cliente están fuera del alcance.
-- Las reglas de plazo (30 días), recargo (10 %, ventana de 12 meses, excluye RECHAZADO) y edad máxima VIDA (70) provienen del catálogo corporativo (MCP `catalogo-coberturas`, versión 2025.1) y se implementan como constantes; la aplicación no consulta el catálogo en tiempo de ejecución.
-- La transición automática VIGENTE → VENCIDA sigue a cargo del proceso nocturno externo; esta feature no la modifica.
-- Las pólizas RENOVADA no pueden cancelarse (la cancelación sigue permitida solo para VIGENTE).
+- El actor es el operador que hoy consulta el detalle de una póliza. No se agrega un permiso distinto para renovar.
+- La acción **Renovar** vive en el detalle. No se exige en el listado.
+- La renovación no pide datos nuevos: no se cambia la suma asegurada ni se eligen coberturas. El operador solo revisa y confirma.
+- "Un año" y "12 meses" de vigencia se resuelven como en la emisión: la fecha de fin es la fecha de inicio más un año calendario.
+- La nueva empieza el día de fin de la original, como indica el catálogo corporativo ("desde la fecha de fin"). Ese día pertenece a las dos vigencias.
+- El recargo es el del catálogo corporativo: 10 % si hubo al menos un siniestro no rechazado con ocurrencia dentro de los últimos 12 meses, contados sobre la póliza original. La ventana incluye el día que cae exactamente 12 meses antes. Los siniestros de otras pólizas del cliente no cuentan.
+- El mínimo de 100,00 USD se aplica a la prima base. El 10 % se calcula después, sobre esa base ya ajustada al mínimo.
+- Una póliza vigente cuyo fin ya pasó sigue siendo renovable mientras su estado siga siendo vigente. El proceso que pasa pólizas a vencidas queda fuera de esta función.
+- La póliza nueva nace vigente aunque su inicio no sea hoy. Esta función no calcula el estado a partir de las fechas.
+- No se aplican en esta función la edad máxima de renovación de vida, el examen médico ni los mínimos de suma asegurada del catálogo que hoy tampoco se aplican al emitir.
+- Quedan fuera de alcance el cobro de la prima, el envío de notificaciones al cliente y la renovación de varias pólizas en una sola acción.
+- Los clientes, pólizas y siniestros que se usen para probar esta función son ficticios.
