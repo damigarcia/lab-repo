@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "catalogo-coberturas": {
+      "command": "node",
+      "args": ["mcp/catalogo-coberturas/index.js"]
+    }
+  }
+}
